@@ -4,7 +4,10 @@
   More info at https://github.com/renatobo/bonogps
   Renato Bonomini https://github.com/renatobo
 
-  Version with esp32_https_server: Flash: [========= ]  91.5% (used 1798653 bytes from 1966080 bytes)
+  Version with esp32_https_server:
+  Flash: [========= ]  91.5% (used 1798653 bytes from 1966080 bytes)
+  compare to builtin WebServer.h
+  Flash: [========  ]  83.1% (used 1632974 bytes from 1966080 bytes)
   [D][bonogps.cpp:2281] setup(): Free heap: 133224
 
 ******************************************************************************/
