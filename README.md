@@ -99,15 +99,13 @@ This code is developed specifically for ESP32, and tested with [PlatformIO](http
   - [Nimble-Arduino](https://github.com/h2zero/NimBLE-Arduino) 
   - [Uptime Library](https://github.com/YiannisBourkelis/Uptime-Library) 
   - [EasyButton](https://easybtn.earias.me/) 
-  - [WiFiManager](https://github.com/tzapu/WiFiManager) 
+  - [esp32_https_server](https://github.com/fhessel/esp32_https_server)
 
 ### Optional libraries depending on #define options
   - [Task Scheduler](https://github.com/arkhipenko/TaskScheduler)  [included by default]
   - [NeoGPS](https://github.com/SlashDevin/NeoGPS)  [not included right now, but coded and available for some additional cases]
 
 ### Built-in libraries used by this code
-  - WebServer
-  - FS
   - Preferences
   - WiFi
   - DNSServer
