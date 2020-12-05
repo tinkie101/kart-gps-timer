@@ -4,6 +4,9 @@
   More info at https://github.com/renatobo/bonogps
   Renato Bonomini https://github.com/renatobo
 
+  Version with esp32_https_server: Flash: [========= ]  91.5% (used 1798653 bytes from 1966080 bytes)
+  [D][bonogps.cpp:2281] setup(): Free heap: 133224
+
 ******************************************************************************/
 
 // For PlatformIO or VS Code IDE
@@ -501,7 +504,7 @@ void StoreNVMPreferencesWiFiCreds()
   size_t_written = prefs.putString("wifikey", stored_preferences.wifi_key);
   if (size_t_written > 0)
   {
-    log_i("WiFi Key written (size %d)",size_t_written);
+    log_i("WiFi Key written (size %d)", size_t_written);
   }
   else
   {
@@ -510,7 +513,7 @@ void StoreNVMPreferencesWiFiCreds()
   size_t_written = prefs.putString("wifissid", stored_preferences.wifi_ssid);
   if (size_t_written > 0)
   {
-    log_i("WiFi SSID written (size %d)",size_t_written);
+    log_i("WiFi SSID written (size %d)", size_t_written);
   }
   else
   {
@@ -551,8 +554,8 @@ bool ledon;
 void led_blink()
 {
   //toggle state
-  ledon=!ledon;
-  digitalWrite(LED_BUILTIN, (ledon?HIGH:LOW)); // set pin to the opposite state
+  ledon = !ledon;
+  digitalWrite(LED_BUILTIN, (ledon ? HIGH : LOW)); // set pin to the opposite state
 }
 
 #ifdef TASK_SCHEDULER
@@ -564,6 +567,7 @@ Task tLedBlink(0, TASK_FOREVER, &led_blink, &ts, false);
     WiFi connection
 
  * ******************************/
+const char content_type[] PROGMEM = "Content-Type";
 const char html_text[] PROGMEM = "text/html";
 const char text_json[] PROGMEM = "application/json";
 const char json_ok[] PROGMEM = "{'status':'ok'}";
@@ -630,7 +634,7 @@ void wifi_STA()
   WiFi.mode(WIFI_STA); // explicitly set mode, esp defaults to STA+AP
   // start ticker_wifi with 50 ms because we start in STA mode and try to connect
 #ifdef TASK_SCHEDULER
-log_d("Start rapid blinking");
+  log_d("Start rapid blinking");
   tLedBlink.setInterval(50);
   tLedBlink.enable();
 #endif
@@ -649,7 +653,7 @@ log_d("Start rapid blinking");
   if (WiFi.status() == WL_CONNECTED)
   {
     log_i("Connected to SSID %s", stored_preferences.wifi_ssid);
-      tLedBlink.setInterval(250);
+    tLedBlink.setInterval(250);
     wifi_connected = true;
 #ifdef ENABLE_OTA
     log_i("Start OTA service");
@@ -721,7 +725,7 @@ void wifi_AP()
   WebConfig_start();
 
 #ifdef TASK_SCHEDULER
-log_d("Start blinking");
+  log_d("Start blinking");
   tLedBlink.setInterval(1000);
   tLedBlink.enable();
 #endif
@@ -744,8 +748,19 @@ log_d("Start blinking");
    Web Configuration portal
 
  * ******************************/
-#include <WebServer.h>
-WebServer webserver(80);
+#if CONFIG_FREERTOS_UNICORE
+#define ARDUINO_RUNNING_CORE 0
+#else
+#define ARDUINO_RUNNING_CORE 1
+#endif
+
+#include <HTTPServer.hpp>
+#include <HTTPRequest.hpp>
+#include <HTTPResponse.hpp>
+
+using namespace httpsserver;
+
+HTTPServer webserver = HTTPServer();
 
 // Helper to populate a page with style sheet
 String generate_html_body(String input, bool add_menu = true)
@@ -761,7 +776,11 @@ String generate_html_body(String input, bool add_menu = true)
   htmlbody += F("</header>\n");
   htmlbody += input;
 #ifdef GIT_REPO
-  htmlbody += F("<footer>Version: <a style='font-size: small;background: none;text-decoration: underline;' target='_blank' href='" GIT_REPO "'>" BONO_GPS_VERSION "</a></footer></body></html>");
+  htmlbody += F("<footer>Version: <a style='font-size: small;background: none;text-decoration: underline;' target='_blank' href='");
+  htmlbody += GIT_REPO;
+  htmlbody += "'>";
+  htmlbody += BONO_GPS_VERSION;
+  htmlbody += F("</a></footer></body></html>");
 #else
   htmlbody += F("<footer>Version: " BONO_GPS_VERSION "</footer></body></html>");
 #endif
@@ -840,15 +859,14 @@ String html_select(String divlabel, String parameters[], String parameters_names
   return message;
 }
 
-void handle_css()
+void handle_css(HTTPRequest *req, HTTPResponse *res)
 {
   log_i("Handle CSS response");
-  webserver.sendHeader("Cache-Control", "max-age=3600");
-  webserver.send(200,
-                 "text/css",
-                 F("*{box-sizing:border-box;text-align:center;width:100%;font-weight:300}body{font-family:Roboto,system-ui,Arial,Helvetica,sans-serif;font-size:5vw;margin:0}header{background-color:#666;padding:.5vw;text-align:center;color:#fff}article{float:left;padding:10px;width:100%;height:auto}details{display:table;clear:both}summary{font-size:larger;font-weight:400;padding:10px;background-color:#f1f1f1}footer{background-color:#777;padding:.2vw;text-align:center;color:#fff;clear:both;position:fixed;bottom:0;font-size:small}@media (min-width:800px){article{width:50%}*{font-size:2.5vw}}a,input{color:#fff;border-radius:8pt;background:red;text-decoration:none;padding:5pt}.bg input{display:none}label{border:solid;border-radius:8pt;padding:5px;margin:2px;border-color:#bdbdbd;border-width:2px;color:#9e9e9e}.bg input:checked+label,.bg input:checked+label:active{background:red;color:#fff;border-color:red}"));
+  res->setHeader("Cache-Control", "max-age=3600");
+  res->setHeader("Content-Type", "text/css");
+  res->println(F("*{box-sizing:border-box;text-align:center;width:100%;font-weight:300}body{font-family:Roboto,system-ui,Arial,Helvetica,sans-serif;font-size:5vw;margin:0}header{background-color:#666;padding:.5vw;text-align:center;color:#fff}article{float:left;padding:10px;width:100%;height:auto}details{display:table;clear:both}summary{font-size:larger;font-weight:400;padding:10px;background-color:#f1f1f1}footer{background-color:#777;padding:.2vw;text-align:center;color:#fff;clear:both;position:fixed;bottom:0;font-size:small}@media (min-width:800px){article{width:50%}*{font-size:2.5vw}}a,input{color:#fff;border-radius:8pt;background:red;text-decoration:none;padding:5pt}.bg input{display:none}label{border:solid;border-radius:8pt;padding:5px;margin:2px;border-color:#bdbdbd;border-width:2px;color:#9e9e9e}.bg input:checked+label,.bg input:checked+label:active{background:red;color:#fff;border-color:red}"));
 }
-void handle_menu()
+void handle_menu(HTTPRequest *req, HTTPResponse *res)
 {
   // variables used to build html buttons
   String sv_values[2] = {"8", "all"};
@@ -897,10 +915,11 @@ void handle_menu()
 #endif
   mainpage += F("\n</details>\n<details><summary>Device</summary>\n<article>Suspend GPS for <a href='/powersave/1800'>30'</a> <a href='/powersave/3600'>1 hr</a></article>\n<article><a href='/preset'>Load Preset</a></article>\n<article><a href='/status'>Information</a></article>\n<article><a href='/restart'>Restart</a></article>\n<article><a href='/savecfg'>Save config</a></article>\n<article><a href='/savecfg/wifi/creds'>Save WiFi credentials</a></article></details>");
   log_i("sending webserver root response");
-  webserver.send(200, html_text, generate_html_body(mainpage, false));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(mainpage, false));
 }
 
-void handle_preset()
+void handle_preset(HTTPRequest *req, HTTPResponse *res)
 {
   String mainpage((char *)0);
   mainpage.reserve(2000);
@@ -932,22 +951,23 @@ void handle_preset()
   String mainpage = "No settings available with this firmware options";
 #endif
   log_i("Handle load preset");
-  webserver.send(200, html_text, generate_html_body(mainpage));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(mainpage));
 }
 
 #ifdef BLEENABLED
-void handle_ble_off()
+void handle_ble_off(HTTPRequest *req, HTTPResponse *res)
 {
   log_i("Turning off BLE");
   stored_preferences.ble_active = false;
   ble_stop();
 #ifdef SHORT_API
-  webserver.send(200, text_json, json_ok);
+  res->setHeader(content_type, text_json);res->println(json_ok);
 #else
-  webserver.send(200, html_text, generate_html_body(F("Turn <b>off</b> BLE<br><a href='/savecfg/nowifi'>Save settings</a>")));
+  res->setHeader(content_type, html_text);res->println(generate_html_body(F("Turn <b>off</b> BLE<br><a href='/savecfg/nowifi'>Save settings</a>")));
 #endif
 }
-void handle_ble_on()
+void handle_ble_on(HTTPRequest *req, HTTPResponse *res)
 {
   log_i("Turning on BLE");
   stored_preferences.ble_active = true;
@@ -955,33 +975,36 @@ void handle_ble_on()
   stored_preferences.btspp_active = false;
   bt_spp_stop();
 #ifdef SHORT_API
-  webserver.send(200, text_json, json_ok);
+  res->setHeader(content_type, text_json);res->println(json_ok);
 #else
-  webserver.send(200, html_text, generate_html_body(F("Turned <b>ON</b> BLE, and turned <b>OFF</b> BT-SPP<p>This causes a restart of the device: to store permanently, disable BT-SPP, save config, enable BLE")));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(F("Turned <b>ON</b> BLE, and turned <b>OFF</b> BT-SPP<p>This causes a restart of the device: to store permanently, disable BT-SPP, save config, enable BLE")));
 #endif
 #else
 #ifdef SHORT_API
-  webserver.send(200, text_json, json_ok);
+  res->setHeader(content_type, text_json);res->println(json_ok);
 #else
-  webserver.send(200, html_text, generate_html_body(F("Turned <b>ON</b> BLE<br><a href='/savecfg/nowifi'>Save settings</a>")));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(F("Turned <b>ON</b> BLE<br><a href='/savecfg/nowifi'>Save settings</a>")));
 #endif
 #endif
   ble_start();
 }
 #endif
 #ifdef BTSPPENABLED
-void handle_btspp_off()
+void handle_btspp_off(HTTPRequest *req, HTTPResponse *res)
 {
   log_i("Turning off BT-SPP");
   stored_preferences.btspp_active = false;
   bt_spp_stop();
 #ifdef SHORT_API
-  webserver.send(200, text_json, json_ok);
+  res->setHeader(content_type, text_json);res->println(json_ok);
 #else
-  webserver.send(200, html_text, generate_html_body(F("Turn <b>off</b> BLE")));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(F("Turn <b>off</b> BLE")));
 #endif
 }
-void handle_btspp_on()
+void handle_btspp_on(HTTPRequest *req, HTTPResponse *res)
 {
   log_i("Turning on BT-SPP");
   stored_preferences.btspp_active = true;
@@ -989,21 +1012,23 @@ void handle_btspp_on()
   stored_preferences.ble_active = false;
   ble_stop();
 #ifdef SHORT_API
-  webserver.send(200, text_json, json_ok);
+  res->setHeader(content_type, text_json);res->println(json_ok);
 #else
-  webserver.send(200, html_text, generate_html_body(F("Turned <b>ON</b> BLE, and turned <b>OFF</b> BT-SPP<br><a href='/savecfg/nowifi'>Save settings</a>")));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(F("Turned <b>ON</b> BLE, and turned <b>OFF</b> BT-SPP<br><a href='/savecfg/nowifi'>Save settings</a>")));
 #endif
 #else
 #ifdef SHORT_API
-  webserver.send(200, text_json, json_ok);
+  res->setHeader(content_type, text_json);res->println(json_ok);
 #else
-  webserver.send(200, html_text, generate_html_body(F("Turned <b>ON</b> BT-SPP")));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(F("Turned <b>ON</b> BT-SPP")));
 #endif
 #endif
   bt_spp_start();
 }
 #endif
-void handle_powersave_1hr()
+void handle_powersave_1hr(HTTPRequest *req, HTTPResponse *res)
 {
   log_i("enable power saving mode for 3600 seconds");
   // disable polling of GSA and GSV
@@ -1015,12 +1040,13 @@ void handle_powersave_1hr()
   push_gps_message(UBLOX_PWR_SAVE_1HR, sizeof(UBLOX_PWR_SAVE_1HR));
   gps_powersave = true;
 #ifdef SHORT_API
-  webserver.send(200, text_json, json_ok);
+  res->setHeader(content_type, text_json);res->println(json_ok);
 #else
-  webserver.send(200, html_text, generate_html_body(F("Enabled power saving mode for 3600 seconds")));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(F("Enabled power saving mode for 3600 seconds")));
 #endif
 }
-void handle_powersave_30min()
+void handle_powersave_30min(HTTPRequest *req, HTTPResponse *res)
 {
   log_i("enable power saving mode for 1800 seconds");
   // disable polling of GSA and GSV
@@ -1032,100 +1058,107 @@ void handle_powersave_30min()
   push_gps_message(UBLOX_PWR_SAVE_30MIN, sizeof(UBLOX_PWR_SAVE_30MIN));
   gps_powersave = true;
 #ifdef SHORT_API
-  webserver.send(200, text_json, json_ok);
+  res->setHeader(content_type, text_json);res->println(json_ok);
 #else
-  webserver.send(200, html_text, generate_html_body(F("Enabled power saving mode for 1800 seconds")));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(F("Enabled power saving mode for 1800 seconds")));
 #endif
 }
 static const char savecfg[] PROGMEM = "<br><a href='/savecfg/nowifi'>Save settings</a>";
-void handle_rate_1hz()
+void handle_rate_1hz(HTTPRequest *req, HTTPResponse *res)
 {
   log_i("Set GPS Rate to 1 Hz");
   push_gps_message(UBLOX_INIT_1HZ, sizeof(UBLOX_INIT_1HZ));
   stored_preferences.gps_rate = 1;
 #ifdef SHORT_API
-  webserver.send(200, text_json, json_ok);
+  res->setHeader(content_type, text_json);res->println(json_ok);
 #else
   String message((char *)0);
   message.reserve(70);
   message += F("Rate set to <b>1 Hz</b>");
   message += FPSTR(savecfg);
-  webserver.send(200, html_text, generate_html_body(message));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(message));
 #endif
 }
-void handle_rate_5hz()
+void handle_rate_5hz(HTTPRequest *req, HTTPResponse *res)
 {
   log_i("Set GPS Rate to 5 Hz");
   push_gps_message(UBLOX_INIT_5HZ, sizeof(UBLOX_INIT_5HZ));
   stored_preferences.gps_rate = 5;
 #ifdef SHORT_API
-  webserver.send(200, text_json, json_ok);
+  res->setHeader(content_type, text_json);res->println(json_ok);
 #else
   String message((char *)0);
   message.reserve(70);
   message += F("Rate set to <b>5 Hz</b>");
   message += FPSTR(savecfg);
-  webserver.send(200, html_text, generate_html_body(message));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(message));
 #endif
 }
-void handle_rate_10hz()
+void handle_rate_10hz(HTTPRequest *req, HTTPResponse *res)
 {
   log_i("Set GPS Rate to 10 Hz");
   push_gps_message(UBLOX_INIT_10HZ, sizeof(UBLOX_INIT_10HZ));
   stored_preferences.gps_rate = 10;
 #ifdef SHORT_API
-  webserver.send(200, text_json, json_ok);
+  res->setHeader(content_type, text_json);res->println(json_ok);
 #else
   String message((char *)0);
   message.reserve(70);
   message += F("Rate set to <b>10 Hz</b>");
   message += FPSTR(savecfg);
-  webserver.send(200, html_text, generate_html_body(message));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(message));
 #endif
 }
-void handle_baudrate_38400()
+void handle_baudrate_38400(HTTPRequest *req, HTTPResponse *res)
 {
   log_i("Set BAUD Rate to 38400");
   switch_baudrate(38400);
 #ifdef SHORT_API
-  webserver.send(200, text_json, json_ok);
+  res->setHeader(content_type, text_json);res->println(json_ok);
 #else
   String message((char *)0);
   message.reserve(70);
   message += F("Baud set to <b>38k4</b>");
   message += FPSTR(savecfg);
-  webserver.send(200, html_text, generate_html_body(message));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(message));
 #endif
 }
-void handle_baudrate_57600()
+void handle_baudrate_57600(HTTPRequest *req, HTTPResponse *res)
 {
   log_i("Set BAUD Rate to 57600");
   switch_baudrate(57600);
 #ifdef SHORT_API
-  webserver.send(200, text_json, json_ok);
+  res->setHeader(content_type, text_json);res->println(json_ok);
 #else
   String message((char *)0);
   message.reserve(70);
   message += F("Baud set to <b>57k6</b>");
   message += FPSTR(savecfg);
-  webserver.send(200, html_text, generate_html_body(message));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(message));
 #endif
 }
-void handle_baudrate_115200()
+void handle_baudrate_115200(HTTPRequest *req, HTTPResponse *res)
 {
   log_i("Set BAUD Rate to 115200");
   switch_baudrate(115200);
 #ifdef SHORT_API
-  webserver.send(200, text_json, json_ok);
+  res->setHeader(content_type, text_json);res->println(json_ok);
 #else
   String message((char *)0);
   message.reserve(71);
   message += F("Baud set to <b>115k2</b>");
   message += FPSTR(savecfg);
-  webserver.send(200, html_text, generate_html_body(message));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(message));
 #endif
 }
-void handle_gsv_on()
+void handle_gsv_on(HTTPRequest *req, HTTPResponse *res)
 {
   log_i("Enable GxGSV messages");
 #ifdef TASKSCHEDULER
@@ -1135,31 +1168,33 @@ void handle_gsv_on()
   stored_preferences.nmeaGSV = true;
   stored_preferences.nmeaGSAGSVpolling = 0;
 #ifdef SHORT_API
-  webserver.send(200, text_json, json_ok);
+  res->setHeader(content_type, text_json);res->println(json_ok);
 #else
   String message((char *)0);
   message.reserve(70);
   message += F("Enabled GxGSV messages");
   message += FPSTR(savecfg);
-  webserver.send(200, html_text, generate_html_body(message));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(message));
 #endif
 }
-void handle_gsv_off()
+void handle_gsv_off(HTTPRequest *req, HTTPResponse *res)
 {
   log_i("Disable GxGSV messages");
   push_gps_message(UBLOX_GxGSV_OFF, sizeof(UBLOX_GxGSV_OFF));
   stored_preferences.nmeaGSV = false;
 #ifdef SHORT_API
-  webserver.send(200, text_json, json_ok);
+  res->setHeader(content_type, text_json);res->println(json_ok);
 #else
   String message((char *)0);
   message.reserve(71);
   message += F("Disabled GxGSV messages");
   message += FPSTR(savecfg);
-  webserver.send(200, html_text, generate_html_body(message));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(message));
 #endif
 }
-void handle_gsa_on()
+void handle_gsa_on(HTTPRequest *req, HTTPResponse *res)
 {
   log_i("Enable GxGSA messages");
 #ifdef TASKSCHEDULER
@@ -1169,146 +1204,160 @@ void handle_gsa_on()
   stored_preferences.nmeaGSA = true;
   stored_preferences.nmeaGSAGSVpolling = 0;
 #ifdef SHORT_API
-  webserver.send(200, text_json, json_ok);
+  res->setHeader(content_type, text_json);res->println(json_ok);
 #else
   String message((char *)0);
   message.reserve(70);
   message += F("Enabled GxGSA messages");
   message += FPSTR(savecfg);
-  webserver.send(200, html_text, generate_html_body(message));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(message));
 #endif
 }
-void handle_gsa_off()
+void handle_gsa_off(HTTPRequest *req, HTTPResponse *res)
 {
   log_i("Disable GxGSA messages");
   push_gps_message(UBLOX_GxGSA_OFF, sizeof(UBLOX_GxGSA_OFF));
   stored_preferences.nmeaGSA = false;
 #ifdef SHORT_API
-  webserver.send(200, text_json, json_ok);
+  res->setHeader(content_type, text_json);res->println(json_ok);
 #else
   String message((char *)0);
   message.reserve(70);
   message += F("Disable GxGSA messages");
   message += FPSTR(savecfg);
-  webserver.send(200, html_text, generate_html_body(message));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(message));
 #endif
 }
 #ifdef TASK_SCHEDULER
-void handle_pollgsagsv_on_1()
+void handle_pollgsagsv_on_1(HTTPRequest *req, HTTPResponse *res)
 {
   log_i("Enable polling of GSA and GSV messages every 1 sec");
   control_poll_GSA_GSV(1);
 #ifdef SHORT_API
-  webserver.send(200, text_json, json_ok);
+  res->setHeader(content_type, text_json);res->println(json_ok);
 #else
   String message((char *)0);
   message.reserve(70);
   message += F("Disable GxGSA messages");
   message += FPSTR(savecfg);
-  webserver.send(200, html_text, generate_html_body(message));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(message));
 #endif
 
-  webserver.send(200, html_text, generate_html_body(F("Enabled polling of alternate GSA and GSV messages every 1 second")));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(F("Enabled polling of alternate GSA and GSV messages every 1 second")));
 }
-void handle_pollgsagsv_on_5()
+void handle_pollgsagsv_on_5(HTTPRequest *req, HTTPResponse *res)
 {
   log_i("Enable polling of GSA and GSV messages every 5 sec");
   control_poll_GSA_GSV(5);
 #ifdef SHORT_API
-  webserver.send(200, text_json, json_ok);
+  res->setHeader(content_type, text_json);res->println(json_ok);
 #else
   String message((char *)0);
   message.reserve(70);
   message += F("Disable GxGSA messages");
   message += FPSTR(savecfg);
-  webserver.send(200, html_text, generate_html_body(message));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(message));
 #endif
 
-  webserver.send(200, html_text, generate_html_body(F("Enabled polling of alternate GSA and GSV messages every 5 seconds")));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(F("Enabled polling of alternate GSA and GSV messages every 5 seconds")));
 }
-void handle_pollgsagsv_off()
+void handle_pollgsagsv_off(HTTPRequest *req, HTTPResponse *res)
 {
   log_i("Disable polling of GSA and GSV messages every");
   control_poll_GSA_GSV(0);
 #ifdef SHORT_API
-  webserver.send(200, text_json, json_ok);
+  res->setHeader(content_type, text_json);res->println(json_ok);
 #else
   String message((char *)0);
   message.reserve(70);
   message += F("Disable GxGSA messages");
   message += FPSTR(savecfg);
-  webserver.send(200, html_text, generate_html_body(message));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(message));
 #endif
 
-  webserver.send(200, html_text, generate_html_body(F("Disabled polling of alternate GSA and GSV messages")));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(F("Disabled polling of alternate GSA and GSV messages")));
 }
 #endif
 
-void handle_gbs_on()
+void handle_gbs_on(HTTPRequest *req, HTTPResponse *res)
 {
   log_i("Enable GxGBS messages");
   push_gps_message(UBLOX_GxGBS_ON, sizeof(UBLOX_GxGBS_ON));
   stored_preferences.nmeaGBS = true;
 #ifdef SHORT_API
-  webserver.send(200, text_json, json_ok);
+  res->setHeader(content_type, text_json);res->println(json_ok);
 #else
   String message((char *)0);
   message.reserve(70);
   message += F("Disable GxGSA messages");
   message += FPSTR(savecfg);
-  webserver.send(200, html_text, generate_html_body(message));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(message));
 #endif
 
-  webserver.send(200, html_text, generate_html_body(F("Enabled GxGBS messages<br><a href='/savecfg/nowifi'>Save settings</a>")));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(F("Enabled GxGBS messages<br><a href='/savecfg/nowifi'>Save settings</a>")));
 }
-void handle_gbs_off()
+void handle_gbs_off(HTTPRequest *req, HTTPResponse *res)
 {
   log_i("Disable GxGBS messages");
   push_gps_message(UBLOX_GxGBS_OFF, sizeof(UBLOX_GxGBS_OFF));
   stored_preferences.nmeaGBS = false;
 #ifdef SHORT_API
-  webserver.send(200, text_json, json_ok);
+  res->setHeader(content_type, text_json);res->println(json_ok);
 #else
   String message((char *)0);
   message.reserve(70);
   message += F("Disable GxGSA messages");
   message += FPSTR(savecfg);
-  webserver.send(200, html_text, generate_html_body(message));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(message));
 #endif
 
-  webserver.send(200, html_text, generate_html_body(F("Disabled GxGBS messages<br><a href='/savecfg/nowifi'>Save settings</a>")));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(F("Disabled GxGBS messages<br><a href='/savecfg/nowifi'>Save settings</a>")));
 }
-void handle_svchannel_8()
+void handle_svchannel_8(HTTPRequest *req, HTTPResponse *res)
 {
   log_i("Restric to 8 SVs per Talker Id");
   push_gps_message(UBLOX_INIT_CHANNEL_8, sizeof(UBLOX_INIT_CHANNEL_8));
 #ifdef SHORT_API
-  webserver.send(200, text_json, json_ok);
+  res->setHeader(content_type, text_json);res->println(json_ok);
 #else
   String message((char *)0);
   message.reserve(70);
   message += F("NMEA  8 SVs per Talker");
   message += FPSTR(savecfg);
-  webserver.send(200, html_text, generate_html_body(message));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(message));
 #endif
 }
-void handle_svchannel_all()
+void handle_svchannel_all(HTTPRequest *req, HTTPResponse *res)
 {
   log_i("All SVs per Talker Id");
   push_gps_message(UBLOX_INIT_CHANNEL_ALL, sizeof(UBLOX_INIT_CHANNEL_ALL));
 #ifdef SHORT_API
-  webserver.send(200, text_json, json_ok);
+  res->setHeader(content_type, text_json);res->println(json_ok);
 #else
   String message((char *)0);
   message.reserve(70);
   message += F("All SVs ");
   message += FPSTR(savecfg);
-  webserver.send(200, html_text, generate_html_body(message));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(message));
 #endif
 }
 
 #ifdef BTSPPENABLED
-void handle_trackaddict_on()
+void handle_trackaddict_on(HTTPRequest *req, HTTPResponse *res)
 {
   // /trackaddict/on
   log_i("Set optimal configuration for Track Addict");
@@ -1320,16 +1369,17 @@ void handle_trackaddict_on()
   bt_spp_start();
   stored_preferences.btspp_active = true;
 #ifdef SHORT_API
-  webserver.send(200, text_json, json_ok);
+  res->setHeader(content_type, text_json);res->println(json_ok);
 #else
   String message((char *)0);
   message.reserve(70);
   message += F("Set TrackAddict ");
   message += FPSTR(savecfg);
-  webserver.send(200, html_text, generate_html_body(message));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(message));
 #endif
 }
-void handle_trackaddict_off()
+void handle_trackaddict_off(HTTPRequest *req, HTTPResponse *res)
 {
   // /trackaddict/off
   log_i("Unset optimal configuration for Track Addict");
@@ -1345,19 +1395,20 @@ void handle_trackaddict_off()
 #endif
   push_gps_message(UBLOX_INIT_CHANNEL_ALL, sizeof(UBLOX_INIT_CHANNEL_ALL));
 #ifdef SHORT_API
-  webserver.send(200, text_json, json_ok);
+  res->setHeader(content_type, text_json);res->println(json_ok);
 #else
   String message((char *)0);
   message.reserve(70);
   message += F("UnSet TrackAddict ");
   message += FPSTR(savecfg);
-  webserver.send(200, html_text, generate_html_body(message));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(message));
 #endif
 }
 #endif
 
 #ifdef BTSPPENABLED
-void handle_racechrono_android()
+void handle_racechrono_android(HTTPRequest *req, HTTPResponse *res)
 {
   // /hlt/android
   log_i("Setting optimal configuration for RaceChrono on Android: 10Hz, GSA+GSV Off, GBS On, BT-SPP");
@@ -1388,9 +1439,10 @@ void handle_racechrono_android()
   message.reserve(70);
   message += F("Set optimal configuration for RaceChrono on Android:");
   message += FPSTR(savecfg);
-  webserver.send(200, html_text, generate_html_body(message));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(message));
 }
-void handle_hlt_android()
+void handle_hlt_android(HTTPRequest *req, HTTPResponse *res)
 {
   // /hlt/android
   log_i("Setting optimal configuration for Harry Lap Timer on Android: 10Hz, GSA+GSV Off, GSA+GSV polled on a 5 sec cycle, GBS On, BT-SPP");
@@ -1421,10 +1473,11 @@ void handle_hlt_android()
   message.reserve(70);
   message += F("Set optimal configuration for Harry Lap Timer on Android:");
   message += FPSTR(savecfg);
-  webserver.send(200, html_text, generate_html_body(message));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(message));
 }
 #endif
-void handle_hlt_tcpip()
+void handle_hlt_tcpip(HTTPRequest *req, HTTPResponse *res)
 {
   // /hlt/tcpip
   log_i("Setting optimal configuration for Harry Lap Timer on TCP-IP: 10Hz, GSA+GSV Polling, GBS On, BLE Off, BT-SPP Off");
@@ -1458,7 +1511,7 @@ void handle_hlt_tcpip()
     // Hack: since disabling spp and enabling BLE crashes the stack and restart ESP32, we store the current configuration for a restart
     // stored_preferences.btspp_active = false;
     // StoreNVMPreferences(true);
-    // webserver.send(200, html_text, generate_html_body(F("<b>RESTARTING</b> to set optimal configuration for Harry Lap Timer on iOS devices:</p><p><ul><li>All SV's</li><li>GBS On</li><li>GSA+GSV stream off</li><li>GSA+GSV polled on a 5 sec cycle</li><li>Updates at 10 Hz</li><li>BLE connection</li></ul></p><p>Settings have been already saved</p>")));
+    // res->setHeader(content_type, html_text);res->println(generate_html_body(F("<b>RESTARTING</b> to set optimal configuration for Harry Lap Timer on iOS devices:</p><p><ul><li>All SV's</li><li>GBS On</li><li>GSA+GSV stream off</li><li>GSA+GSV polled on a 5 sec cycle</li><li>Updates at 10 Hz</li><li>BLE connection</li></ul></p><p>Settings have been already saved</p>")));
     // delay(1000);
     // ESP.restart();
     // This is how it should be:
@@ -1470,10 +1523,11 @@ void handle_hlt_tcpip()
   message.reserve(70);
   message += F("Set optimal configuration for Harry Lap Timer on WiFi:");
   message += FPSTR(savecfg);
-  webserver.send(200, html_text, generate_html_body(message));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(message));
 }
 #ifdef BLEENABLED
-void handle_hlt_ios()
+void handle_hlt_ios(HTTPRequest *req, HTTPResponse *res)
 {
   // /hlt/ios
   log_i("Setting optimal configuration for Harry Lap Timer on iOS devices: 10Hz, GSA+GSV Off, GBS On, BLE");
@@ -1501,7 +1555,8 @@ void handle_hlt_ios()
     stored_preferences.btspp_active = false;
     stored_preferences.ble_active = true;
     StoreNVMPreferences(true);
-    webserver.send(200, html_text, generate_html_body(F("<b>RESTARTING</b> to set optimal configuration for Harry Lap Timer on iOS devices:</p><p>Settings have been already saved</p>")));
+    res->setHeader(content_type, html_text);
+    res->println(generate_html_body(F("<b>RESTARTING</b> to set optimal configuration for Harry Lap Timer on iOS devices:</p><p>Settings have been already saved</p>")));
     delay(1000);
     ESP.restart();
     // This is how it should be:
@@ -1518,36 +1573,41 @@ void handle_hlt_ios()
   message.reserve(70);
   message += F("Set optimal configuration for Harry Lap Timer on iOS:");
   message += FPSTR(savecfg);
-  webserver.send(200, html_text, generate_html_body(message));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(message));
 }
 #endif
-void handle_wifi_sta()
+void handle_wifi_sta(HTTPRequest *req, HTTPResponse *res)
 {
   log_i("Start WiFi in STA mode");
-  webserver.send(200, html_text, generate_html_body(F("WiFi STATION mode started, trying to connect to a know Access Point. <br>Reconnect in a few seconds")));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(F("WiFi STATION mode started, trying to connect to a know Access Point. <br>Reconnect in a few seconds")));
   stored_preferences.wifi_mode = WIFI_STA;
   wifi_STA();
 }
-void handle_wifi_ap()
+void handle_wifi_ap(HTTPRequest *req, HTTPResponse *res)
 {
   log_i("Start WiFi in AP mode");
-  webserver.send(200, html_text, generate_html_body(String("WiFi Access Point mode started. <br>Reconnect in a few seconds to AP:" + String(ap_ssid))));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(String("WiFi Access Point mode started. <br>Reconnect in a few seconds to AP:" + String(ap_ssid))));
   stored_preferences.wifi_mode = WIFI_AP;
   wifi_AP();
 }
-void handle_restart()
+void handle_restart(HTTPRequest *req, HTTPResponse *res)
 {
-  webserver.send(200, html_text, generate_html_body(F("Please confirm <form action='/restart_execute' method='post'><input type='submit' value='Restart'></form>")));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(F("Please confirm <form action='/restart' method='post'><input type='submit' value='Restart'></form>")));
 }
-void handle_restart_execute()
+void handle_restart_execute(HTTPRequest *req, HTTPResponse *res)
 {
   log_i("Restarting");
-  webserver.send(200, html_text, generate_html_body(F("Restarting device")));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(F("Restarting device")));
   delay(1000);
   ESP.restart();
   delay(1000);
 }
-void handle_status()
+void handle_status(HTTPRequest *req, HTTPResponse *res)
 {
   log_d("Logging status to web");
   String message((char *)0);
@@ -1632,9 +1692,10 @@ void handle_status()
   message += F("<br>Free PSRAM: ");
   message += String(ESP.getFreePsram());
 
-  webserver.send(200, html_text, generate_html_body(message));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(message));
 }
-void handle_clients()
+void handle_clients(HTTPRequest *req, HTTPResponse *res)
 {
   log_i("Logging clients status to web");
   String message((char *)0);
@@ -1667,30 +1728,41 @@ void handle_clients()
   }
 #endif
   message += F(" connected");
-  webserver.send(200, html_text, generate_html_body(message));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(message));
 }
 
-void handle_saveconfig_wifi_creds()
+void handle_saveconfig_wifi_creds(HTTPRequest *req, HTTPResponse *res)
 {
-  webserver.send(200, html_text, generate_html_body(F("<article><form action='/savecfg/wifi/creds/post'>SSID<br><input style='background: none' name='ssid' maxlength='32'><p>WPA Key<br><input style='background: none' type='password' name='key' maxlength='64'><p><input type='submit' value='Save'></form></article>")));
+  res->setHeader(content_type, html_text);
+  // due to the inability of finding out how to read POST variables in a ResourceParameters form esp32_https_server, form is GET
+  res->println(generate_html_body(F("<article><form action='/savecfg/wifi/creds/post' >SSID<br><input style='background: none;color: black;' name='ssid' maxlength='32'><p>WPA Key<br><input style='background: none;color: black;' type='password' name='key' maxlength='64'><p><input type='submit' value='Save'></form></article>")));
 }
 
-void handle_saveconfig_wifi_creds_post()
+void handle_saveconfig_wifi_creds_post(HTTPRequest *req, HTTPResponse *res)
 {
-  String wifissid = webserver.arg("ssid"); 
-  String wifikey = webserver.arg("key");
-  // TODO Check inputs
-  log_i("WiFi SSID %s", wifissid);
-  log_d("WiFi Key %s", wifikey);
-  wifissid.toCharArray(stored_preferences.wifi_ssid,WIFI_SSID_MAXLEN);
-  wifikey.toCharArray(stored_preferences.wifi_key,WIFI_KEY_MAXLEN);
-  // TODO check if writes were ok
-  StoreNVMPreferencesWiFiCreds();
-  // TODO check is storing went fine
-  webserver.send(200, html_text, generate_html_body(F("<article>New WiFi SSID and Key stored <p><a href='/wifi/sta'>Try them</a></article>")));
+  auto params = req->getParams();
+  std::string wifissid;
+  std::string wifikey;
+  bool hasssid = params->getQueryParameter("ssid", wifissid);
+  bool haskey = params->getQueryParameter("key", wifikey);
+  res->setHeader(content_type, html_text);
+  if (hasssid && haskey) {
+    log_i("WiFi SSID %s", wifissid);
+    log_d("WiFi Key %s", wifikey);
+    strcpy(stored_preferences.wifi_ssid, wifissid.c_str());
+    strcpy(stored_preferences.wifi_key, wifikey.c_str());
+    StoreNVMPreferencesWiFiCreds();
+    // TODO check is storing went fine
+    res->println(generate_html_body(F("<article>New WiFi SSID and Key stored <p><a href='/wifi/sta'>Try them</a></article>")));
+  } 
+  else 
+  {
+    res->println(generate_html_body(F("<article>Either SSID or Key empty - not stored</article>")));
+  }  
 }
 
-void handle_saveconfig()
+void handle_saveconfig(HTTPRequest *req, HTTPResponse *res)
 {
   log_i("Storing preferences intermediate menu");
   String message((char *)0);
@@ -1705,95 +1777,154 @@ void handle_saveconfig()
     message += "STA";
   }
   message += F(" mode</a></p>\n<h1>Save only a specific WiFi mode</h1><p>Save <a href='/savecfg/wifi/sta'>WiFi client mode WiFi-STA </a></p><p>Save <a href='/savecfg/wifi/ap'>WiFi Access Point mode WiFi-AP</a></p>");
-  webserver.send(200, html_text, generate_html_body(message));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(message));
 }
-void handle_saveconfig_withwifi()
+void handle_saveconfig_withwifi(HTTPRequest *req, HTTPResponse *res)
 {
   StoreNVMPreferences(true);
   log_i("Storing preferences including WiFi");
-  webserver.send(200, html_text, generate_html_body(F("Preferences including WiFi stored")));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(F("Preferences including WiFi stored")));
 }
-void handle_saveconfig_withoutwifi()
+void handle_saveconfig_withoutwifi(HTTPRequest *req, HTTPResponse *res)
 {
   StoreNVMPreferences(false);
   log_i("Storing preferences excluding WiFi");
-  webserver.send(200, html_text, generate_html_body(F("Preferences excluding WiFi stored")));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(F("Preferences excluding WiFi stored")));
 }
-void handle_saveconfig_wifi_sta()
+void handle_saveconfig_wifi_sta(HTTPRequest *req, HTTPResponse *res)
 {
   StoreNVMPreferencesWiFi("WIFI_STA");
   log_i("Storing preference WIFI_STA");
-  webserver.send(200, html_text, generate_html_body(F("Stored preference WIFI_STA as default: this will be used at next restart")));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(F("Stored preference WIFI_STA as default: this will be used at next restart")));
 }
-void handle_saveconfig_wifi_ap()
+void handle_saveconfig_wifi_ap(HTTPRequest *req, HTTPResponse *res)
 {
   StoreNVMPreferencesWiFi("WIFI_AP");
   log_i("Storing preference WIFI_AP");
-  webserver.send(200, html_text, generate_html_body(F("Stored preference WIFI_AP as default: this will be used at next restart")));
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(F("Stored preference WIFI_AP as default: this will be used at next restart")));
 }
-void handle_NotFound()
+void handle_NotFound(HTTPRequest *req, HTTPResponse *res)
 {
-  webserver.send(404, html_text, generate_html_body(F("Not found")));
+  req->discardRequestBody();
+  res->setStatusCode(404);
+  res->setStatusText("Not Found");
+  res->setHeader(content_type, html_text);
+  res->println(generate_html_body(F("<h1>404 Not Found</h1><p>The requested resource was not found on this server.</p>")));
 }
 void WebConfig_start()
 {
-  webserver.on("/", handle_menu);
-  webserver.on("/css", handle_css);
-  webserver.on("/rate/1hz", handle_rate_1hz);
-  webserver.on("/rate/5hz", handle_rate_5hz);
-  webserver.on("/rate/10hz", handle_rate_10hz);
-  webserver.on("/gsa/on", handle_gsa_on);
-  webserver.on("/gsa/off", handle_gsa_off);
-  webserver.on("/gsv/on", handle_gsv_on);
-  webserver.on("/gsv/off", handle_gsv_off);
-  webserver.on("/gbs/on", handle_gbs_on);
-  webserver.on("/gbs/off", handle_gbs_off);
-  webserver.on("/sv/8", handle_svchannel_8);
-  webserver.on("/sv/all", handle_svchannel_all);
+  // For every resource available on the server, we need to create a ResourceNode
+  // The ResourceNode links URL and HTTP method to a handler function
+  ResourceNode *nodeRoot = new ResourceNode("/", "GET", &handle_menu);
+
+  webserver.registerNode(nodeRoot);
+  ResourceNode *node404 = new ResourceNode("", "GET", &handle_NotFound);
+  webserver.setDefaultNode(node404);
+
+  ResourceNode *nodecss = new ResourceNode("/css", "GET", handle_css);
+  webserver.registerNode(nodecss);
+  ResourceNode *noderate_1hz = new ResourceNode("/rate/1hz", "GET", handle_rate_1hz);
+  webserver.registerNode(noderate_1hz);
+  ResourceNode *noderate_5hz = new ResourceNode("/rate/5hz", "GET", handle_rate_5hz);
+  webserver.registerNode(noderate_5hz);
+  ResourceNode *noderate_10hz = new ResourceNode("/rate/10hz", "GET", handle_rate_10hz);
+  webserver.registerNode(noderate_10hz);
+  ResourceNode *nodegsa_on = new ResourceNode("/gsa/on", "GET", handle_gsa_on);
+  webserver.registerNode(nodegsa_on);
+  ResourceNode *nodegsa_off = new ResourceNode("/gsa/off", "GET", handle_gsa_off);
+  webserver.registerNode(nodegsa_off);
+  ResourceNode *nodegsv_on = new ResourceNode("/gsv/on", "GET", handle_gsv_on);
+  webserver.registerNode(nodegsv_on);
+  ResourceNode *nodegsv_off = new ResourceNode("/gsv/off", "GET", handle_gsv_off);
+  webserver.registerNode(nodegsv_off);
+  ResourceNode *nodegbs_on = new ResourceNode("/gbs/on", "GET", handle_gbs_on);
+  webserver.registerNode(nodegbs_on);
+  ResourceNode *nodegbs_off = new ResourceNode("/gbs/off", "GET", handle_gbs_off);
+  webserver.registerNode(nodegbs_off);
+  ResourceNode *nodesv8 = new ResourceNode("/sv/8", "GET", handle_svchannel_8);
+  webserver.registerNode(nodesv8);
+  ResourceNode *nodesv8all = new ResourceNode("/sv/all", "GET", handle_svchannel_all);
+  webserver.registerNode(nodesv8all);
 #ifdef BTSPPENABLED
-  webserver.on("/hlt/android", handle_hlt_android);
-  webserver.on("/trackaddict/on", handle_trackaddict_on);
-  webserver.on("/trackaddict/off", handle_trackaddict_off);
-  webserver.on("/racechrono/android", handle_racechrono_android);
+  ResourceNode *nodehlt_android = new ResourceNode("/hlt/android", "GET", handle_hlt_android);
+  webserver.registerNode(nodehlt_android);
+  ResourceNode *nodeta_on = new ResourceNode("/trackaddict/on", "GET", handle_trackaddict_on);
+  webserver.registerNode(nodeta_on);
+  ResourceNode *nodeta_off = new ResourceNode("/trackaddict/off", "GET", handle_trackaddict_off);
+  webserver.registerNode(nodeta_off);
+  ResourceNode *noderc_android = new ResourceNode("/racechrono/android", "GET", handle_racechrono_android);
+  webserver.registerNode(noderc_android);
 #endif
 #ifdef BLEENABLED
-  webserver.on("/hlt/ios", handle_hlt_ios);
+  ResourceNode *nodehlt_ios = new ResourceNode("/hlt/ios", "GET", handle_hlt_ios);
+  webserver.registerNode(nodehlt_ios);
 #endif
-  webserver.on("/hlt/tcpip", handle_hlt_tcpip);
-  webserver.on("/wifi/sta", handle_wifi_sta);
-  webserver.on("/wifi/ap", handle_wifi_ap);
-  webserver.on("/restart", handle_restart);
-  webserver.on("/restart_execute", handle_restart_execute);
-  webserver.on("/savecfg", handle_saveconfig);
-  webserver.on("/savecfg/wifi", handle_saveconfig_withwifi);
-  webserver.on("/savecfg/nowifi", handle_saveconfig_withoutwifi);
-  webserver.on("/savecfg/wifi/sta", handle_saveconfig_wifi_sta);
-  webserver.on("/savecfg/wifi/ap", handle_saveconfig_wifi_ap);
-  webserver.on("/savecfg/wifi/creds", handle_saveconfig_wifi_creds);
-  webserver.on("/savecfg/wifi/creds/post", handle_saveconfig_wifi_creds_post);
-  webserver.on("/preset", handle_preset);
-  webserver.on("/powersave/3600", handle_powersave_1hr);
-  webserver.on("/powersave/1800", handle_powersave_30min);
-  webserver.on("/status", handle_status);
-  webserver.on("/clients", handle_clients);
-  webserver.on("/baud/38400", handle_baudrate_38400);
-  webserver.on("/baud/57600", handle_baudrate_57600);
-  webserver.on("/baud/115200", handle_baudrate_115200);
+  ResourceNode *nodehlt_tcpip = new ResourceNode("/hlt/tcpip", "GET", handle_hlt_tcpip);
+  webserver.registerNode(nodehlt_tcpip);
+  ResourceNode *nodewifi_sta = new ResourceNode("/wifi/sta", "GET", handle_wifi_sta);
+  webserver.registerNode(nodewifi_sta);
+  ResourceNode *nodewifi_ap = new ResourceNode("/wifi/ap", "GET", handle_wifi_ap);
+  webserver.registerNode(nodewifi_ap);
+  ResourceNode *noderestart = new ResourceNode("/restart", "GET", handle_restart);
+  webserver.registerNode(noderestart);
+  ResourceNode *noderestart_post = new ResourceNode("/restart", "POST", handle_restart_execute);
+  webserver.registerNode(noderestart_post);
+  ResourceNode *nodesavecfg = new ResourceNode("/savecfg", "GET", handle_saveconfig);
+  webserver.registerNode(nodesavecfg);
+  ResourceNode *nodesavecfg_wifi = new ResourceNode("/savecfg/wifi", "GET", handle_saveconfig_withwifi);
+  webserver.registerNode(nodesavecfg_wifi);
+  ResourceNode *nodesavecfg_nowifi = new ResourceNode("/savecfg/nowifi", "GET", handle_saveconfig_withoutwifi);
+  webserver.registerNode(nodesavecfg_nowifi);
+  ResourceNode *nodesavecfg_wifi_sta = new ResourceNode("/savecfg/wifi/sta", "GET", handle_saveconfig_wifi_sta);
+  webserver.registerNode(nodesavecfg_wifi_sta);
+  ResourceNode *nodesavecfg_wifi_ap = new ResourceNode("/savecfg/wifi/ap", "GET", handle_saveconfig_wifi_ap);
+  webserver.registerNode(nodesavecfg_wifi_ap);
+  ResourceNode *nodesavecfg_wifi_creds = new ResourceNode("/savecfg/wifi/creds", "GET", handle_saveconfig_wifi_creds);
+  webserver.registerNode(nodesavecfg_wifi_creds);
+  ResourceNode *nodesavecfg_wifi_creds_post = new ResourceNode("/savecfg/wifi/creds/post", "GET", handle_saveconfig_wifi_creds_post);
+  webserver.registerNode(nodesavecfg_wifi_creds_post);
+  ResourceNode *nodepreset = new ResourceNode("/preset", "GET", handle_preset);
+  webserver.registerNode(nodepreset);
+  ResourceNode *nodepowersave_3600 = new ResourceNode("/powersave/3600", "GET", handle_powersave_1hr);
+  webserver.registerNode(nodepowersave_3600);
+  ResourceNode *nodepowersave_1800 = new ResourceNode("/powersave/1800", "GET", handle_powersave_30min);
+  webserver.registerNode(nodepowersave_1800);
+  ResourceNode *nodestatus = new ResourceNode("/status", "GET", handle_status);
+  webserver.registerNode(nodestatus);
+  ResourceNode *nodeclients = new ResourceNode("/clients", "GET", handle_clients);
+  webserver.registerNode(nodeclients);
+  ResourceNode *nodebaud_38400 = new ResourceNode("/baud/38400", "GET", handle_baudrate_38400);
+  webserver.registerNode(nodebaud_38400);
+  ResourceNode *nodebaud_57600 = new ResourceNode("/baud/57600", "GET", handle_baudrate_57600);
+  webserver.registerNode(nodebaud_57600);
+  ResourceNode *nodebaud_115200 = new ResourceNode("/baud/115200", "GET", handle_baudrate_115200);
+  webserver.registerNode(nodebaud_115200);
 #ifdef BLEENABLED
-  webserver.on("/ble/on", handle_ble_on);
-  webserver.on("/ble/off", handle_ble_off);
+  ResourceNode *nodeble_on = new ResourceNode("/ble/on", "GET", handle_ble_on);
+  webserver.registerNode(nodeble_on);
+  ResourceNode *nodeble_off = new ResourceNode("/ble/off", "GET", handle_ble_off);
+  webserver.registerNode(nodeble_off);
 #endif
 #ifdef BTSPPENABLED
-  webserver.on("/btspp/on", handle_btspp_on);
-  webserver.on("/btspp/off", handle_btspp_off);
+  ResourceNode *nodebtspp_on = new ResourceNode("/btspp/on", "GET", handle_btspp_on);
+  webserver.registerNode(nodebtspp_on);
+  ResourceNode *nodebtspp_off = new ResourceNode("/btspp/off", "GET", handle_btspp_off);
+  webserver.registerNode(nodebtspp_off);
 #endif
 #ifdef TASK_SCHEDULER
-  webserver.on("/poll/gsagsv/0", handle_pollgsagsv_off);
-  webserver.on("/poll/gsagsv/1", handle_pollgsagsv_on_1);
-  webserver.on("/poll/gsagsv/5", handle_pollgsagsv_on_5);
+  ResourceNode *nodepollgsavgsv_off = new ResourceNode("/poll/gsagsv/0", "GET", handle_pollgsagsv_off);
+  webserver.registerNode(nodepollgsavgsv_off);
+  ResourceNode *nodepollgsavgsv_on_1 = new ResourceNode("/poll/gsagsv/1", "GET", handle_pollgsagsv_on_1);
+  webserver.registerNode(nodepollgsavgsv_on_1);
+  ResourceNode *nodepollgsavgsv_on_5 = new ResourceNode("/poll/gsagsv/5", "GET", handle_pollgsagsv_on_5);
+  webserver.registerNode(nodepollgsavgsv_on_5);
 #endif
-  webserver.onNotFound(handle_NotFound);
-  webserver.begin();
+  webserver.start();
 #ifdef MDNS_ENABLE
   MDNS.addService("http", "tcp", 80);
 #endif
@@ -2281,7 +2412,7 @@ void loop()
     }
 
     // TODO - impove handling of webserver so that it has a lower priority or spin a separate task
-    webserver.handleClient();
+    webserver.loop();
   }
 
 #ifdef BUTTON
