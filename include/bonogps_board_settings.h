@@ -15,7 +15,7 @@
 
 ******************************************************************************/
 
-#define RX2 1 // Standard label Rx2 on board
-#define TX2 3 // Standard label Tx2 on board
+#define RX2 16 // Standard label Rx2 on board
+#define TX2 17 // Standard label Tx2 on board
 #define WIFI_MODE_BUTTON 0 // default is: use the boot button to switch wifi modes
 #define LED_BUILTIN 2 // this should not be needed if you choose the right board
