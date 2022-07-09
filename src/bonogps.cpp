@@ -5,6 +5,9 @@
 #include "BluetoothSerial.h"
 #include <esp_wifi.h>
 #include <future>
+#include <SPI.h>
+#include <nRF24L01.h>
+#include <RF24.h>
 
 #define TASK_SCHEDULER // enable adv task scheduler. Small memory save to be worth removing
 
@@ -27,8 +30,8 @@ uint8_t newBoardAddress[] = {0x94, 0x3C, 0xC6, 0x08, 0x35, 0x60};
 #error This code is designed to run only on the ESP32 board
 #endif
 
-#define RX2 RX // Standard label Rx2 on board
-#define TX2 TX // Standard label Tx2 on board
+#define RX2 16 // Standard label Rx2 on board
+#define TX2 17 // Standard label Tx2 on board
 
 int max_buffer = 0;
 bool gps_powersave = false;
@@ -379,10 +382,81 @@ void setupESPNow()
   espNow_Connected = true;
 }
 
-TaskHandle_t Task1;
 bool newGPSData = false;
 uint8_t *gpsBuf;
 size_t gpsLen;
+
+void writeESPNow() {
+  // Write to esp-now
+  if(espNow_Connected) {
+    esp_err_t result = esp_now_send(newBoardAddress, gpsBuf, gpsLen);
+
+    if(result == ESP_OK) {
+      Serial.println("ESP-NOW sent");
+    } else {
+      Serial.println("ESP-NOW failed");
+    }
+  }
+
+  free(gpsBuf);
+  newGPSData = false;
+}
+
+// //create an RF24 object
+#define CE_PIN  22
+#define CSN_PIN 21
+
+const byte sendToAddress[5] = {'R', 'x', 'A', 'A', 'A'};
+
+RF24 radio(CE_PIN, CSN_PIN);
+bool radioOn = false;
+
+void setupNRF24L01() {
+  if(radio.begin()) {
+      radioOn = true;
+      Serial.println("Radio started");
+   } else {
+      radioOn = false;
+      Serial.println("Radio failed");
+   }
+  radio.setDataRate( RF24_250KBPS );
+  radio.disableAckPayload();
+  radio.openWritingPipe(sendToAddress);
+  radio.printDetails();
+    
+  //Set module as transmitter
+  radio.stopListening();
+}
+
+void writeNRF24L01() {
+  //Send message to receiver
+  Serial.print("Radio: ");
+  Serial.println(radioOn);
+
+  char gpsData[32];
+
+  memcpy(gpsData, gpsBuf, sizeof(gpsData));
+
+  if(radioOn) {
+    bool result = radio.write(gpsBuf, sizeof(gpsBuf));
+
+    Serial.print((char*)gpsBuf);
+    Serial.print(": ");
+    Serial.println(sizeof(gpsBuf));
+
+    if(result == ESP_OK) {
+      Serial.println("nRF24l01+ sent");
+    } else {
+      Serial.println("nRF24l01+ failed");
+    }
+  }
+
+  free(gpsBuf);
+  newGPSData = false;
+}
+
+
+TaskHandle_t Task1;
 
 void Task1code( void * pvParameters ){
   Serial.print("Task1 running on core ");
@@ -390,22 +464,11 @@ void Task1code( void * pvParameters ){
 
   for(;;){
       if(newGPSData) {
-        // Write to esp-now
-        if(espNow_Connected) {
-          esp_err_t result = esp_now_send(newBoardAddress, gpsBuf, gpsLen);
-
-          if(result == ESP_OK) {
-            Serial.println("ESP-NOW sent");
-          } else {
-            Serial.println("ESP-NOW failed");
-          }
-        }
-
-        free(gpsBuf);
-        newGPSData = false;
+        // writeESPNow();
+        writeNRF24L01();
       }
 
-      delay(300);
+      delay(200);
   }
 }
 
@@ -413,7 +476,8 @@ void setup()
 {
   SerialMonitor.begin(LOG_BAUD_RATE); // Initialize the serial monitor
   delay(200);
-  setupESPNow();
+  // setupESPNow();
+  setupNRF24L01();
   log_d("ESP32 SDK: %s", ESP.getSdkVersion());
 
   // Generate device name
@@ -431,15 +495,17 @@ void setup()
   log_d("Free PSRAM: %d", ESP.getFreePsram());
 
   // Start core 2
-  xTaskCreatePinnedToCore(
-    Task1code,   /* Task function. */
-    "Task1",     /* name of task. */
-    10000,       /* Stack size of task */
-    NULL,        /* parameter of the task */
-    1,           /* priority of the task */
-    &Task1,      /* Task handle to keep track of created task */
-    0
-  );          /* pin task to core 0 */
+  if(radioOn) {
+    xTaskCreatePinnedToCore(
+      Task1code,   /* Task function. */
+      "Task1",     /* name of task. */
+      10000,       /* Stack size of task */
+      NULL,        /* parameter of the task */
+      1,           /* priority of the task */
+      &Task1,      /* Task handle to keep track of created task */
+      0
+    );          /* pin task to core 0 */
+  }
 }
 
 void loop()
@@ -468,6 +534,7 @@ void loop()
     {
       // we have BT-SPP active
       SerialBT.write(sbuf, len);
+      Serial.println("Wrote to bluetooth");
     }
   }
 
