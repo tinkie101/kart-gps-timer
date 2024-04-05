@@ -30,8 +30,8 @@ uint8_t newBoardAddress[] = {0x94, 0x3C, 0xC6, 0x08, 0x35, 0x60};
 #error This code is designed to run only on the ESP32 board
 #endif
 
-#define RX2 1 // Standard label Rx2 on board
-#define TX2 3 // Standard label Tx2 on board
+#define RX2 RX // Standard label Rx2 on board
+#define TX2 TX // Standard label Tx2 on board
 
 int max_buffer = 0;
 bool gps_powersave = false;
