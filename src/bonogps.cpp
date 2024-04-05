@@ -30,8 +30,8 @@ uint8_t newBoardAddress[] = {0x94, 0x3C, 0xC6, 0x08, 0x35, 0x60};
 #error This code is designed to run only on the ESP32 board
 #endif
 
-#define RX2 16 // Standard label Rx2 on board
-#define TX2 17 // Standard label Tx2 on board
+#define RX2 1 // Standard label Rx2 on board
+#define TX2 3 // Standard label Tx2 on board
 
 int max_buffer = 0;
 bool gps_powersave = false;
@@ -54,7 +54,7 @@ char blspp_device_id[MAX_AP_NAME_SIZE];
 
 char ap_ssid[MAX_AP_NAME_SIZE];
 uint16_t chip;
-#define KARTGPS_AP "KartGPS"
+#define KARTGPS_AP "KartGPS_PCB"
 
 esp_now_peer_info_t peerInfo;
 
@@ -406,7 +406,7 @@ void writeESPNow() {
 #define CE_PIN  22
 #define CSN_PIN 21
 
-const byte sendToAddress[5] = {'R', 'x', 'A', 'A', 'A'};
+const byte sendToAddress[5] = {'R', 'x', 'A', 'B', 'A'};
 
 RF24 radio(CE_PIN, CSN_PIN);
 bool radioOn = false;
@@ -414,18 +414,21 @@ bool radioOn = false;
 void setupNRF24L01() {
   if(radio.begin()) {
       radioOn = true;
+
+      radio.setDataRate( RF24_250KBPS );
+      radio.disableAckPayload();
+      radio.openWritingPipe(sendToAddress);
+      radio.printDetails();
+        
+      //Set module as transmitter
+      radio.stopListening();
+
       Serial.println("Radio started");
    } else {
       radioOn = false;
       Serial.println("Radio failed");
    }
-  radio.setDataRate( RF24_250KBPS );
-  radio.disableAckPayload();
-  radio.openWritingPipe(sendToAddress);
-  radio.printDetails();
-    
-  //Set module as transmitter
-  radio.stopListening();
+  
 }
 
 void writeNRF24L01() {
@@ -480,12 +483,13 @@ void setup()
   setupNRF24L01();
   log_d("ESP32 SDK: %s", ESP.getSdkVersion());
 
+    pinMode(2, OUTPUT);
   // Generate device name
   chip = (uint16_t)((uint64_t)ESP.getEfuseMac() >> 32);
   sprintf(ap_ssid, "%s-%04X", KARTGPS_AP, chip);
   sprintf(blspp_device_id, "%s-%04X", KARTGPS_AP, chip);
 
-    bt_spp_start();
+  bt_spp_start();
 
   gps_initialize_settings();
 
@@ -510,6 +514,7 @@ void setup()
 
 void loop()
 {
+  digitalWrite(2, HIGH);
   // check UART for data
   if (gpsPort.available())
   {
